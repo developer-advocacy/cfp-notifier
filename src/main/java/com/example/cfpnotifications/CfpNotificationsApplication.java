@@ -82,12 +82,6 @@ public class CfpNotificationsApplication {
                     ps.setString(4, url);
                     ps.setDate(5, stop);
                     ps.setString(6, url);
-//                    ps.setDate(7, start);
-//                    ps.setString(8, url);
-//                    ps.setDate(9, start);
-//                    ps.setString(10, name);
-
-
                 })
                 .build();
     }
