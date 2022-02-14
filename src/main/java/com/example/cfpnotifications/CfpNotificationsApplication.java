@@ -13,23 +13,35 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
+import org.springframework.batch.item.support.IteratorItemReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.net.URL;
 import java.util.*;
 import java.util.function.Predicate;
 
+@Slf4j
+@EnableBatchProcessing
 @SpringBootApplication
 public class CfpNotificationsApplication {
 
     public static void main(String[] args) throws Exception {
         SpringApplication.run(CfpNotificationsApplication.class, args);
-        Thread.sleep(10_000);
     }
 
     @Bean
@@ -37,7 +49,48 @@ public class CfpNotificationsApplication {
         return new ChromeClient(phantomJsPath);
     }
 
+    @Bean
+    @SneakyThrows
+    ItemReader<Event> eventItemReader(ConfsTechClient client) {
+        return new IteratorItemReader<Event>(client.read());
+    }
+
+    @Bean
+    ItemWriter<Event> eventItemWriter(DataSource dataSource) {
+        return new JdbcBatchItemWriterBuilder<Event>()
+                .dataSource(dataSource)
+                .assertUpdates(false)
+                .sql("""
+                            insert into events( name, start_date, end_date) values( ?, ?, ?)  
+                        """)
+                .itemPreparedStatementSetter((event, ps) -> {
+                    ps.setString(1, event.name());
+                    ps.setDate(2, new java.sql.Date(event.startDate().getTime()));
+                    ps.setDate(3, new java.sql.Date(event.endDate().getTime()));
+                })
+                .build();
+    }
+
+    @Bean
+    Step stepOne(StepBuilderFactory builderFactory, ItemReader<Event> reader, ItemWriter<Event> writer) {
+        return builderFactory
+                .get("http-db")
+                .<Event, Event>chunk(500)
+                .reader(reader)
+                .writer(writer)
+                .build();
+    }
+
+    @Bean
+    Job job(JobBuilderFactory jobs, Step stepOne) {
+        return jobs
+                .get("read-conferences")
+                .incrementer(new RunIdIncrementer())
+                .start(stepOne)
+                .build();
+    }
 }
+
 
 @Slf4j
 @RequiredArgsConstructor
@@ -48,18 +101,18 @@ class ChromeClient {
     @SneakyThrows
     Document render(URL url, Predicate<WebDriver> pageReadyWebDriverPredicate) {
         System.setProperty("webdriver.chrome.driver", chromeDriverBinary.getAbsolutePath());
-
-        var headless = false;
+        var headless = true;
         var options = new ChromeOptions()
                 .setHeadless(headless)
                 .addArguments("--disable-gpu", "--window-size=1920,1200", "--ignore-certificate-errors");
         var driver = new ChromeDriver(options);
         try {
+            log.info("before get");
             driver.get(url.toString());
+            log.info("before wait");
             var webDriverWait = new WebDriverWait(driver, 30);
-            log.info("bef for WebDriver");
             webDriverWait.until(pageReadyWebDriverPredicate::test);
-            log.info("aft for WebDriver");
+            log.info("after wait");
             return Jsoup.parse(driver.getPageSource());
         }//
         finally {
@@ -87,7 +140,7 @@ record Event(Location location, EventAttendanceMode eventAttendanceMode, String 
 
 @Slf4j
 @Component
-record ConfsTechRunner(ObjectMapper objectMapper, ChromeClient client) {
+record ConfsTechClient(ObjectMapper objectMapper, ChromeClient client) {
 
     List<Event> read() throws Exception {
         var cfpUrl = "https://confs.tech/?online=hybrid&topics=java";
@@ -145,7 +198,6 @@ record ConfsTechRunner(ObjectMapper objectMapper, ChromeClient client) {
     }
 
     private Date parseDate(String text) {
-        log.info("the date is " + text);
         var parts = text.split("-");
         var yr = Integer.parseInt(parts[0]);
         var mo = Integer.parseInt(parts[1]);
