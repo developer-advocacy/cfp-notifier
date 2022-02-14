@@ -61,12 +61,33 @@ public class CfpNotificationsApplication {
                 .dataSource(dataSource)
                 .assertUpdates(false)
                 .sql("""
-                            insert into events( name, start_date, end_date) values( ?, ?, ?)  
+                            INSERT INTO 
+                                events(name, start_date, end_date, url ) 
+                            VALUES (?, ?, ?, ?) 
+                            ON CONFLICT ON CONSTRAINT 
+                                events_pkey 
+                            DO
+                                UPDATE set end_date= ? , url = ?   
+                                    
+                               
                         """)
                 .itemPreparedStatementSetter((event, ps) -> {
-                    ps.setString(1, event.name());
-                    ps.setDate(2, new java.sql.Date(event.startDate().getTime()));
-                    ps.setDate(3, new java.sql.Date(event.endDate().getTime()));
+                    var name = event.name();
+                    var start = new java.sql.Date(event.startDate().getTime());
+                    var stop = new java.sql.Date(event.endDate().getTime());
+                    var url = event.url().toString();
+                    ps.setString(1, name);
+                    ps.setDate(2, start);
+                    ps.setDate(3, stop);
+                    ps.setString(4, url);
+                    ps.setDate(5, stop);
+                    ps.setString(6, url);
+//                    ps.setDate(7, start);
+//                    ps.setString(8, url);
+//                    ps.setDate(9, start);
+//                    ps.setString(10, name);
+
+
                 })
                 .build();
     }
@@ -113,7 +134,9 @@ class ChromeClient {
             var webDriverWait = new WebDriverWait(driver, 30);
             webDriverWait.until(pageReadyWebDriverPredicate::test);
             log.info("after wait");
-            return Jsoup.parse(driver.getPageSource());
+            var html = driver.getPageSource();
+            log.info("html: " + html);
+            return Jsoup.parse(html);
         }//
         finally {
             driver.quit();
@@ -144,12 +167,17 @@ record ConfsTechClient(ObjectMapper objectMapper, ChromeClient client) {
 
     List<Event> read() throws Exception {
         var cfpUrl = "https://confs.tech/?online=hybrid&topics=java";
-        var render = this.client.render(new URL(cfpUrl), d -> d.findElements(By.tagName("section")).size() > 0);
+        var resultsLoadedPredicate = (Predicate<WebDriver>) d -> {
+            var sections = d.findElements(By.tagName("section"));
+            var webElement = sections.iterator().next();
+            if (log.isDebugEnabled()) log.debug("the html is: {}", webElement.getText());
+            var noResultsFound = webElement.getText().toLowerCase(Locale.ROOT).contains("no results found");
+            return sections.size() > 0 && !noResultsFound;
+        };
+        var render = this.client.render(new URL(cfpUrl), resultsLoadedPredicate);
         var scripts = render.getElementsByAttributeValue("type", "application/ld+json");
         var events = scripts.stream().map(Element::html).map(this::parse).toList();
-        if (log.isDebugEnabled())
-            for (var e : events)
-                log.debug("event: " + e);
+        if (log.isDebugEnabled()) events.forEach(e -> log.info(e.toString()));
         return events;
     }
 
@@ -199,9 +227,9 @@ record ConfsTechClient(ObjectMapper objectMapper, ChromeClient client) {
 
     private Date parseDate(String text) {
         var parts = text.split("-");
-        var yr = Integer.parseInt(parts[0]);
-        var mo = Integer.parseInt(parts[1]);
-        var day = Integer.parseInt(parts[2]);
+        var yr = Integer.parseInt(parts[0].trim());
+        var mo = Integer.parseInt(parts[1].trim());
+        var day = Integer.parseInt(parts[2].trim());
         var gregorianCalendar = new GregorianCalendar();
         gregorianCalendar.set(GregorianCalendar.MONTH, mo);
         gregorianCalendar.set(GregorianCalendar.YEAR, yr);
