@@ -14,7 +14,6 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
@@ -49,7 +48,7 @@ public class CfpNotificationsApplication {
 	@Bean
 	JsoupChromeClient jsoupChromeClient(@Value("${chromedriver.binaries}") File[] phantomJsPath) {
 		var chromeDriverBinaries = Arrays.stream(phantomJsPath).filter(File::exists).collect(Collectors.toSet());
-		Assert.isTrue(chromeDriverBinaries.size() > 0, () -> "you must have chromedriver installed somewhere!");
+		Assert.isTrue(!chromeDriverBinaries.isEmpty(), () -> "you must have chromedriver installed somewhere!");
 		chromeDriverBinaries.forEach(f -> log.info("the chromedriver binary is " + f.getAbsolutePath()));
 		return new JsoupChromeClient(chromeDriverBinaries.iterator().next());
 	}
@@ -139,7 +138,7 @@ record ConfsTechClient(ObjectMapper objectMapper, JsoupChromeClient client) {
 			var sections = d.findElements(By.tagName("section"));
 			var webElement = sections.iterator().next();
 			var noResultsFound = webElement.getText().toLowerCase(Locale.ROOT).contains("no results found");
-			return sections.size() > 0 && !noResultsFound;
+			return !sections.isEmpty() && !noResultsFound;
 		};
 		var render = this.client.render(new URL(cfpUrl), resultsLoadedPredicate);
 		var scripts = render.getElementsByAttributeValue("type", "application/ld+json");
@@ -160,7 +159,7 @@ record ConfsTechClient(ObjectMapper objectMapper, JsoupChromeClient client) {
 	}
 
 	private Address parseAddress(Object address) {
-		if (address instanceof Map map) {
+		if (address instanceof Map <?,?> map) {
 			return new Address((String) map.get("addressLocality"), (String) map.get("addressCountry"));
 		}
 		return null;
