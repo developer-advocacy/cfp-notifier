@@ -27,7 +27,6 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.nativex.hint.*;
 import org.springframework.util.Assert;
 
 import javax.sql.DataSource;
@@ -38,21 +37,8 @@ import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-@NativeHint(//
-
-		types = { @TypeHint(typeNames = "java.util.HashMap<java.lang.String,java.lang.Object>",
-				types = { ResourceHint.class, HashMap.class },
-				access = { TypeAccess.DECLARED_CLASSES, TypeAccess.DECLARED_CONSTRUCTORS, TypeAccess.DECLARED_FIELDS,
-						TypeAccess.DECLARED_METHODS, }) },
-		//
-		resources = { @ResourceHint(patterns = { "org/asynchttpclient/request/body/multipart/ahc-mime.types",
-				"org/asynchttpclient/config/ahc-default.properties",
-				"org/asynchttpclient/config/ahc-version.properties", }) },
-		initialization = { @InitializationHint(
-				types = { io.netty.channel.DefaultFileRegion.class, io.netty.util.AbstractReferenceCounted.class },
-				initTime = InitializationTime.RUN) })
-@SpringBootApplication
 @Slf4j
+@SpringBootApplication
 public class CfpNotificationsApplication {
 
 	@Bean
@@ -74,7 +60,7 @@ public class CfpNotificationsApplication {
 
 }
 
-@EnableBatchProcessing
+
 @Configuration
 class EventsBatchJobConfiguration {
 
